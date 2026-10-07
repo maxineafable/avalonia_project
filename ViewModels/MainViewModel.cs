@@ -52,14 +52,16 @@ public partial class MainViewModel : ViewModelBase
         await db.SaveChangesAsync();
     }
     
-    public async Task AddGameAsync(string name, string path)
+    public async Task AddGameAsync(string name, GameType type, string? path = null, string? steamAppId = null)
     {
         await using var db = new ApplicationDbContext();
 
         var game = new Game
         {
             Name = name,
-            Path = path,
+            Path = path ?? string.Empty,
+            Type = type,
+            SteamAppId = steamAppId,
             TotalPlayTime = 0
         };
 

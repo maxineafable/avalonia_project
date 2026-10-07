@@ -4,6 +4,12 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace AvaloniaProject.Models;
 
+public enum GameType
+{
+    Native = 0,
+    Steam = 1
+}
+
 public class Game
 {
     [Key]
@@ -11,7 +17,12 @@ public class Game
     public long Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Path { get; set; } = string.Empty;
+    
+    public string? SteamAppId { get; set; }
+    
     public long TotalPlayTime { get; set; }
+    
+    public GameType Type { get; set; } = GameType.Native;
     
     [NotMapped]
     public string FormattedPlayTime

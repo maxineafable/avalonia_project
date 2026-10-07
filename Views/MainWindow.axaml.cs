@@ -1,21 +1,27 @@
 using System;
 using System.Diagnostics;
+using System.IO;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
 
 using AvaloniaProject.Models;
+using AvaloniaProject.Services;
 using AvaloniaProject.ViewModels;
 
 namespace AvaloniaProject.Views;
 
 public partial class MainWindow : Window
 {
+    private readonly GameService _gameService;
     
     public MainWindow()
     {
         InitializeComponent();
+        _gameService = new GameService();
     }
 
     protected override async void OnOpened(EventArgs e)
@@ -98,28 +104,57 @@ public partial class MainWindow : Window
 
     private async void SaveButton_OnClick(object? sender, RoutedEventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(Name.Text) || string.IsNullOrWhiteSpace(Path.Text))
+        if (string.IsNullOrWhiteSpace(Name.Text))
         {
-            TextStatus.Text = "Please fill in a name and path";
+            TextStatus.Text = "Please enter a name";
             TextStatus.Foreground = Brushes.Red;
             return;
         }
+
+        switch (GameTypeComboBox.SelectedIndex)
+        {
+            case 0 when string.IsNullOrWhiteSpace(Path.Text):
+                TextStatus.Text = "Please enter a path";
+                TextStatus.Foreground = Brushes.Red;
+                return;
+            case 1 when
+                (!int.TryParse(SteamAppId.Text, out int steamAppId) || steamAppId <= 0):
+                TextStatus.Text = "Please enter a valid Steam App ID";
+                TextStatus.Foreground = Brushes.Red;
+                return;
+        }
+
+        Console.WriteLine(Name.Text);
+        Console.WriteLine(Path.Text);
+        Console.WriteLine(GameTypeComboBox.SelectedIndex);
+        Console.WriteLine(SteamAppId.Text);
         
         if (DataContext is not MainViewModel viewModel) return;
-
+        
         SaveButton.IsEnabled = false;
         SaveButton.Content = "Saving...";
         
         try
         {
-            await viewModel.AddGameAsync(Name.Text, Path.Text);
+            var gameType = (GameType)GameTypeComboBox.SelectedIndex;
+
+            if (gameType == Models.GameType.Native)
+            {
+                await viewModel.AddGameAsync(Name.Text, Models.GameType.Native, Path.Text);
+            }
+            else
+            {
+                await viewModel.AddGameAsync(Name.Text, Models.GameType.Steam, SteamAppId.Text);
+            }
+            
             await viewModel.LoadGamesAsync();
             
             TextStatus.Text = "Game saved";
             TextStatus.Foreground = Brushes.Green;
-
+        
             Name.Text = "";
             Path.Text = "";
+            SteamAppId.Text = "";
         }
         catch (Exception exception)
         {
@@ -132,14 +167,71 @@ public partial class MainWindow : Window
             SaveButton.IsEnabled = true;
             SaveButton.Content = "Save";
         }
-        
     }
 
     private async void RefreshButton_OnClick(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is MainViewModel viewModel)
+        // if (DataContext is MainViewModel viewModel)
+        // {
+        //     await viewModel.LoadGamesAsync();
+        // }
+        
+        // todo: temporary changed this to test steam game opening
+        var prePlaytime = _gameService.GetSteamPlaytime();
+        TextStatus.Text = prePlaytime.ToString();
+
+        var startInfo = new ProcessStartInfo
         {
-            await viewModel.LoadGamesAsync();
+            FileName = "xdg-open",
+            Arguments = $"steam://rungameid/42700",
+            UseShellExecute = true,
+        };
+    
+        var startProcess = new Process
+        {
+            StartInfo = startInfo,
+            EnableRaisingEvents = true,
+        };
+    
+        startProcess.Start();
+        
+        var gameStartedSuccessfully = false;
+        var maxAttempts = 30;
+
+        for (var i = 0; i < maxAttempts; i++)
+        {
+            if (_gameService.isSteamAppIdRunning())
+            {
+                gameStartedSuccessfully = true;
+                break;
+            }
+            await Task.Delay(1000);
+        }
+        
+        if (gameStartedSuccessfully)
+        {
+            while (_gameService.isSteamAppIdRunning())
+            {
+                await Task.Delay(3000);
+            }
+        }
+        else
+        {
+            TextPostPlaytime.Text = "Game failed to run";
+            return;
+        }
+        
+        await Task.Delay(4000);
+        
+        var postPlaytime = _gameService.GetSteamPlaytime();
+        var session = postPlaytime - prePlaytime;
+        if (session == 0)
+        {
+            TextPostPlaytime.Text = "less than min";
+        }
+        else
+        {
+            TextPostPlaytime.Text = $"Total session: {session.ToString()}";
         }
     }
 }
